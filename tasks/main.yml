@@ -21,11 +21,10 @@
 
 - name: COPY EASY-RSA VARS TEMPLATE
   become: yes
-  template: >
-    src=easy-rsa/vars
-    dest="{{ dir_easyrsa }}/vars"
-    mode=0664
-    force=no
+  template:
+    src: easyrsa-vars
+    dest: "{{ dir_easyrsa }}/vars"
+    mode: 0664
   tags: server
 
 - name: BUILD PKI DIRECTORY WITH EASYRSA
@@ -130,10 +129,7 @@
     src: server.conf
     dest: /etc/openvpn/server.conf
     mode: 0644
-  notify:
-    - RESTART OPENVPN
-  tags:
-    - server
-    - update
+  notify:RESTART OPENVPN
+  tags: ['server', 'update']
 
 - include: newuser.yml
