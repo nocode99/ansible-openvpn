@@ -1,0 +1,65 @@
+- name: CHECK TO SEE IF USER IS IN INDEX
+  become: yes
+  shell: grep -q "{{ username }}" "{{ dir_easyrsa }}/pki/index.txt" ; echo $?
+  register: user_index
+  tags: newuser
+
+- name: STOP PLAYBOOK IF USER EXISTS
+  fail: msg="******{{ username }} ALREADY EXISTS. EXITING! CONTACT ADMIN FOR NEXT STEPS*******"
+  when: user_index.stdout == 0
+  tags: newuser
+
+- name: GENERATE CLIENT CERTIFICATE AND KEY
+  become: yes
+  command: "{{ dir_easyrsa }}/easyrsa build-client-full {{ username }} nopass"
+  args:
+    chdir: "{{ dir_easyrsa }}"
+  tags: newuser
+
+- name: COPY CLIENT KEY PAIRS TO /home/ubuntu
+  become: yes
+  command: rsync -aR --chown=ubuntu:ubuntu "{{ item }}" "{{ dir_userhome }}"
+  with_items:
+    - "{{ files.ca }}"
+    - "{{ files.ta }}"
+    - "{{ files.usercrt }}"
+    - "{{ files.userkey }}"
+  args:
+    chdir: "{{ dir_easyrsa }}"
+  tags: newuser
+
+- name: GENERATE CONF FOR {{ username }}.conf
+  template: >
+    src=client.conf
+    dest="{{ dir_userhome }}/{{ username }}.conf"
+  tags: newuser
+
+- name: COPY FILES TO LOCAL HOME
+  fetch: >
+    src="{{ dir_userhome }}/{{ item }}"
+    dest="{{ dir_localpath }}"
+    flat=yes
+  with_items:
+    - "{{ username }}.conf"
+    - "{{ files.ca }}"
+    - "{{ files.ta }}"
+    - "{{ files.usercrt }}"
+    - "{{ files.userkey }}"
+  tags: ['newuser', 'test']
+
+- name: REMOVE GENERATED {{ username }} KEYS
+  become: yes
+  command: find "{{ dir_easyrsa }}" -name "{{ username }}*" -exec rm {} \;
+  tags: ['newuser', 'test']
+
+- name: REMOVE ALL FILES IN /home/ubuntu
+  file: >
+    path={{ item }}
+    state=absent
+  with_items:
+    - "{{ dir_userhome }}/{{ username }}.conf"
+    - "{{ dir_userhome }}/{{ files.ca }}"
+    - "{{ dir_userhome }}/{{ files.ta }}"
+    - "{{ dir_userhome }}/{{ files.usercrt }}"
+    - "{{ dir_userhome }}/{{ files.userkey }}"
+  tags: ['newuser', 'test']

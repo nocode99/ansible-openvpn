@@ -1,0 +1,20 @@
+hostname: openvpn
+ca_cert_common_name: your_ca_cert_common_name
+
+dir_userhome: /home/ubuntu
+dir_easyrsa: /etc/openvpn/easy-rsa/easyrsa3
+dir_ovpn: /etc/openvpn
+
+files:
+  ta: pki/ta.key
+  ca: pki/ca.crt
+  usercrt: pki/issued/{{ username }}.crt
+  userkey: pki/private/{{ username }}.key
+
+easyrsa_config:
+  country: US
+  province: New York
+  city: New York
+  organization: organization
+  email: donotreply@test.com
+  ou: IT

@@ -1,0 +1,1 @@
+Ansible calls this template and inserts the {{ username }} variable into the .conf and will create this file on the remote target.  Eventually, the {{ username }}.conf file will be copied to the local machine.

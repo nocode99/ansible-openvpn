@@ -1,0 +1,23 @@
+#- name: RESTART OPENVPN
+#  become: yes
+#  service: name=openvpn state=restarted
+
+- name: RESTART OPENVPN
+  become: yes
+  command: systemctl restart openvpn@server
+
+  #- name: START OPENVPN
+  #  become: yes
+  #  service: name=openvpn state=started
+
+- name: START OPENVPN
+  become: yes
+  command: systemctl start openvpn@server
+
+- name: UPDATE SYSCTL
+  become: yes
+  command: sysctl -p
+
+- name: SAVE IPTABLES
+  become: yes
+  command: iptables-save

@@ -1,0 +1,139 @@
+- name: INSTALL OPENVPN AND DEPENDENCIES
+  become: yes
+  apt: name="{{ item }}" state=present update_cache=yes
+  with_items:
+    - openvpn
+    - easy-rsa
+    - git
+  tags: server
+
+- name: MAKE SURE PEXPECT IS LATEST VERSION
+  become: yes
+  pip: name=pexpect state=latest
+  tags: server
+
+- name: GIT COPY EASY-RSA SCRIPTS
+  become: yes
+  git: >
+    repo=https://github.com/OpenVPN/easy-rsa.git
+    dest="{{ dir_ovpn }}/easy-rsa"
+  tags: server
+
+- name: COPY EASY-RSA VARS TEMPLATE
+  become: yes
+  template: >
+    src=easy-rsa/vars
+    dest="{{ dir_easyrsa }}/vars"
+    mode=0664
+    force=no
+  tags: server
+
+- name: BUILD PKI DIRECTORY WITH EASYRSA
+  become: yes
+  command: "{{ dir_easyrsa }}/easyrsa init-pki"
+  args:
+    chdir: "{{ dir_easyrsa }}"
+    creates: "{{ dir_easyrsa }}/pki"
+  tags: server
+
+- name: GENERATE CA CERTIFICATE AND KEY
+  become: yes
+  expect:
+    command: "{{ dir_easyrsa }}/easyrsa build-ca nopass"
+    chdir: "{{ dir_easyrsa }}"
+    responses:
+      Common: '{{ ca_cert_common_name }}'
+  tags: server
+
+- name: GENERATE SERVER CERTIFICATE AND KEY
+  become: yes
+  command: "{{ dir_easyrsa }}/easyrsa build-server-full server nopass"
+  args:
+    chdir: '{{ dir_easyrsa }}'
+  tags: server
+
+- name: GENERATE DIFFIE HELLMAN
+  become: yes
+  command: "{{ dir_easyrsa }}/easyrsa gen-dh"
+  args:
+    chdir: "{{ dir_easyrsa }}"
+  tags: server
+
+- name: GENERATE TA.KEY AND COPY TO etc/openvpn
+  become: yes
+  command: openvpn --genkey --secret "{{ dir_easyrsa }}/{{ files.ta }}"
+  tags: server
+
+- name: CREATE crl.pem FILE
+  become: yes
+  command:  "{{ dir_easyrsa }}/easyrsa gen-crl"
+  args:
+    chdir: "{{ dir_easyrsa }}"
+  tags: server
+
+- name: SET PERMISSIONS TO crl.pem FILE
+  become: yes
+  file:
+    path: "{{ dir_easyrsa }}/pki/crl.pem"
+    owner: nobody
+    group: nogroup
+    mode: 0644
+  tags: server
+
+- name: CHECK TO SEE IF crl.pem HARD LINK EXISTS
+  become: yes
+  stat:
+    path: "{{ dir_ovpn }}/crl.pem"
+  register: crl_pem
+  tags: server
+
+- name: REMOVE HARD LINK IF IT EXISTS
+  become: yes
+  file:
+    path: "{{ dir_ovpn }}/crl.pem"
+    state: absent
+  when: crl_pem.stat.exists == True
+
+- name: CREATE HARD LINK
+  become: yes
+  command: ln "{{ dir_easyrsa }}/pki/crl.pem" crl.pem
+  args:
+    chdir: "{{ dir_ovpn }}"
+  when: crl_pem.stat.exists == False
+  tags: server
+
+- name: COPY /etc/sysctl.conf
+  become: yes
+  copy:
+    src: sysctl.conf
+    dest: /etc/sysctl.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify: UPDATE SYSCTL
+  tags: server
+
+- name: SET POSTROUTE
+  become: yes
+  iptables:
+    table: nat
+    chain: POSTROUTING
+    source: 10.8.0.0/24
+    out_interface: eth0
+    jump: MASQUERADE
+  notify: SAVE IPTABLES
+  tags: server
+
+- name: COPY SERVER.CONF
+  become: yes
+  template:
+    src: server.conf
+    dest: /etc/openvpn/server.conf
+    mode: 0644
+  notify:
+    - RESTART OPENVPN
+  tags:
+    - server
+    - update
+
+- include: newuser.yml
